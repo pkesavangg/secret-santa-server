@@ -2,6 +2,13 @@ require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const bodyParser = require('body-parser');
+const { initFirebase } = require('./config/firebase');
+
+// Initialize Firebase
+initFirebase();
+
+// Import routes
+const checkDisplayNameRoute = require('./routes/checkDisplayNameRoute');
 
 // Initialize app
 const app = express();
@@ -23,9 +30,12 @@ app.get('/', (req, res) => {
     message: 'Secret Santa API Server', 
     version: '1.0.0',
     status: 'In development',
-    info: 'Routes and functionality will be implemented with Firebase Authentication'
+    info: 'Firebase Authentication is integrated'
   });
 });
+
+// Routes
+app.use('/api/users', checkDisplayNameRoute);
 
 // Error handling middleware
 app.use((err, req, res, next) => {

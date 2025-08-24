@@ -32,11 +32,31 @@ cd secret-santa-server
 npm install
 ```
 
-3. Create a `.env` file in the root directory and add the following:
+3. Set up Firebase Admin SDK
+   - Go to the [Firebase Console](https://console.firebase.google.com/)
+   - Select your project (or create a new one)
+   - Go to Project Settings > Service accounts
+   - Click "Generate new private key" and save the JSON file
+   - Rename the file to `serviceAccountKey.json` and place it in a secure location
+
+4. Create a `.env` file in the root directory using the example file as a template:
+```bash
+cp src/.env.example .env
+```
+
+5. Update the `.env` file with your Firebase configuration:
 ```
 PORT=3000
 NODE_ENV=development
-# Firebase and MongoDB configuration will be added later
+
+# Option 1: Use service account file path
+FIREBASE_SERVICE_ACCOUNT_PATH=/path/to/serviceAccountKey.json
+
+# Option 2: Use environment variables (recommended for production)
+FIREBASE_PROJECT_ID=your-project-id
+FIREBASE_CLIENT_EMAIL=firebase-adminsdk-xxxxx@your-project-id.iam.gserviceaccount.com
+FIREBASE_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\nYour Private Key Here\n-----END PRIVATE KEY-----\n"
+FIREBASE_DATABASE_URL=https://your-project-id.firebaseio.com
 ```
 
 ### Running the server
@@ -55,12 +75,24 @@ npm start
 
 - Basic Express server setup
 - Health check endpoint at `GET /health`
-- Placeholder for future API implementation
+- Firebase authentication integration
+- User management API endpoints
 
-## Planned API Endpoints
+## API Endpoints
+
+### Authentication
+Authentication is handled using Firebase Auth. To authenticate requests, include the Firebase ID token in the Authorization header:
+```
+Authorization: Bearer <firebase_id_token>
+```
 
 ### Users
-- Firebase Authentication will be used for user management
+- `GET /api/users/profile` - Get current user profile
+- `GET /api/users` - Get all users (admin only)
+- `GET /api/users/:uid` - Get user by ID (admin only)
+- `POST /api/users` - Create a new user (admin only)
+- `PUT /api/users/:uid` - Update a user (admin only)
+- `DELETE /api/users/:uid` - Delete a user (admin only)
 
 ### Groups
 - `POST /api/groups` - Create a new Secret Santa group
