@@ -3,12 +3,14 @@ const express = require('express');
 const cors = require('cors');
 const bodyParser = require('body-parser');
 const { initFirebase } = require('./config/firebase');
+const connectDB = require('./config/db');
 
 // Initialize Firebase
 initFirebase();
 
 // Import routes
 const checkDisplayNameRoute = require('./routes/checkDisplayNameRoute');
+const gameRoutes = require('./routes/gameRoutes');
 
 // Initialize app
 const app = express();
@@ -31,6 +33,7 @@ app.get('/', (req, res) => {
 
 // Routes
 app.use('/api/users', checkDisplayNameRoute);
+app.use('/api/games', gameRoutes);
 
 // Error handling middleware
 app.use((err, req, res, next) => {
@@ -41,9 +44,11 @@ app.use((err, req, res, next) => {
   });
 });
 
-// Start server
-app.listen(PORT, () => {
-  console.log(`Server running on http://localhost:${PORT}`);
-});
+// Connect to MongoDB and start server
+connectDB().then(() => {
+  app.listen(PORT, () => {
+    console.log(`Server running on http://localhost:${PORT}`);
+  });
+}).catch(err => console.log(err));
 
 module.exports = app; // Export for testing
