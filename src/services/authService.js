@@ -64,6 +64,26 @@ class AuthService {
       throw error;
     }
   }
+
+  /**
+   * Get a user's display name by Firebase Auth user ID
+   * @param {string} userId - Firebase Auth UID
+   * @returns {Promise<string|null>} The display name if available, otherwise null
+   */
+  async getDisplayNameByUserId(userId) {
+    try {
+      if (!userId) {
+        return null;
+      }
+
+      const userRecord = await this.auth.getUser(userId);
+      return userRecord.displayName || null;
+    } catch (error) {
+      console.error('Error fetching user by ID from Firebase Auth:', error);
+      // Return null so callers can decide a fallback
+      return null;
+    }
+  }
 }
 
 module.exports = new AuthService();

@@ -21,10 +21,12 @@ const generateGameCode = () => {
  * @param {Object} req - Express request object
  * @param {Object} res - Express response object
  */
-const createGame = (req, res) => {
+const authService = require('../services/authService');
+
+const createGame = async (req, res) => {
   try {
-    // Extract userId from request body
-    const { userId, displayName } = req.body;
+    // Extract userId and userName from request body
+    const { userId, userName } = req.body;
     
     if (!userId) {
       return res.status(400).json({ 
@@ -37,6 +39,17 @@ const createGame = (req, res) => {
     const gameCode = generateGameCode();
     const currentDate = new Date();
     
+    // Resolve admin display name: prefer Firebase name via userId, then provided userName, else fallback
+    let resolvedDisplayName = userName;
+    try {
+      const firebaseName = await authService.getDisplayNameByUserId(userId);
+      if (firebaseName && firebaseName.trim().length > 0) {
+        resolvedDisplayName = firebaseName;
+      }
+    } catch (e) {
+      // Ignore and use provided or fallback
+    }
+
     const newGame = {
       gameId: `game_${Date.now()}`,
       gameCode,
@@ -47,7 +60,7 @@ const createGame = (req, res) => {
       status: 'created', // created, active, completed
       participants: [{
         userId,
-        displayName: displayName || `User ${userId}`,
+        displayName: resolvedDisplayName || `User ${userId}`,
         joinedAt: currentDate,
         isAdmin: true,
         assignedUserId: null, // will be assigned during matching
@@ -131,12 +144,12 @@ const getUserGames = (req, res) => {
  * @param {Object} req - Express request object
  * @param {Object} res - Express response object
  */
-const addParticipant = (req, res) => {
+const addParticipant = async (req, res) => {
   try {
-    const { gameId } = req.params;
-    const { userId, displayName } = req.body;
+    const { gameId: gameCode } = req.params;
+    const { userId, userName } = req.body;
     
-    if (!gameId) {
+    if (!gameCode) {
       return res.status(400).json({
         status: 'error',
         message: 'Game ID is required'
@@ -150,8 +163,8 @@ const addParticipant = (req, res) => {
       });
     }
     
-    // Find the game by ID
-    const gameIndex = games.findIndex(game => game.gameId === gameId);
+    // Find the game by code
+    const gameIndex = games.findIndex(game => game.gameCode === gameCode);
     
     if (gameIndex === -1) {
       return res.status(404).json({
@@ -187,11 +200,22 @@ const addParticipant = (req, res) => {
     }
     
     const currentDate = new Date();
-    
+
+    // Resolve participant display name from Firebase using userId; fall back to provided or generic
+    let resolvedDisplayName = userName;
+    try {
+      const firebaseName = await authService.getDisplayNameByUserId(userId);
+      if (firebaseName && firebaseName.trim().length > 0) {
+        resolvedDisplayName = firebaseName;
+      }
+    } catch (e) {
+      // Ignore and use provided or fallback
+    }
+
     // Add the new participant
     const newParticipant = {
       userId,
-      displayName: displayName || `User ${userId}`,
+      displayName: resolvedDisplayName || `User ${userId}`,
       joinedAt: currentDate,
       isAdmin: false,
       assignedUserId: null,
