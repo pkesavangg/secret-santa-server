@@ -249,3 +249,218 @@ module.exports = {
   getUserGames,
   addParticipant
 };
+
+/**
+ * Generate symmetric assignments (pairings) for the latest eligible admin game
+ * Rules:
+ * - User must be admin of an eligible game (status: created, isMatchingDone: false)
+ * - Participants count must be even and >= 2
+ * - Pairings are symmetric: if A -> B then B -> A
+ * - After assignment: game.status becomes 'active' and isMatchingDone becomes true
+ *
+ * @param {Object} req - Express request object
+ * @param {Object} res - Express response object
+ */
+const generateChildren = (req, res) => {
+  try {
+    const { userId } = req.params;
+
+    if (!userId) {
+      return res.status(400).json({
+        status: 'error',
+        message: 'User ID is required'
+      });
+    }
+
+    // Find games where user is admin
+    const adminGames = games.filter(g => g.admin === userId);
+
+    if (adminGames.length === 0) {
+      return res.status(404).json({
+        status: 'error',
+        message: 'No games found where user is admin'
+      });
+    }
+
+    // Pick the most recently created eligible game (status created and not matched yet)
+    const eligibleGames = adminGames
+      .filter(g => g.status === 'created' && !g.isMatchingDone)
+      .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+
+    if (eligibleGames.length === 0) {
+      return res.status(400).json({
+        status: 'error',
+        message: 'No eligible games to generate children (already active/completed or none exists)'
+      });
+    }
+
+    const targetGame = eligibleGames[0];
+
+    // Basic validations
+    const participants = targetGame.participants || [];
+    if (participants.length <= 3) {
+      return res.status(400).json({
+        status: 'error',
+        message: 'At least 4 participants are required'
+      });
+    }
+
+    if (participants.length % 2 !== 0) {
+      return res.status(400).json({
+        status: 'error',
+        message: 'Participants count must be even for symmetric pairing'
+      });
+    }
+
+    // Create a shuffled copy of participants (references to same objects)
+    const shuffled = [...participants];
+    for (let i = shuffled.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+    }
+
+    // Reset any previous assignments defensively
+    for (const p of participants) {
+      p.assignedUserId = null;
+    }
+
+    // Pair 0-1, 2-3, ... ensuring symmetry
+    for (let i = 0; i < shuffled.length; i += 2) {
+      const a = shuffled[i];
+      const b = shuffled[i + 1];
+
+      if (!a || !b) {
+        return res.status(500).json({
+          status: 'error',
+          message: 'Unexpected pairing error'
+        });
+      }
+
+      if (a.userId === b.userId) {
+        // Extremely unlikely with proper shuffle and even count, but guard anyway
+        return res.status(500).json({
+          status: 'error',
+          message: 'Self-pairing detected; retry the operation'
+        });
+      }
+
+      a.assignedUserId = b.userId;
+      b.assignedUserId = a.userId;
+    }
+
+    // Populate child display names for easier reads
+    const idToDisplayName = new Map(participants.map(p => [p.userId, p.displayName]));
+    for (const p of participants) {
+      p.childDisplayName = p.assignedUserId ? idToDisplayName.get(p.assignedUserId) || null : null;
+    }
+
+    targetGame.isMatchingDone = true;
+    targetGame.status = 'active';
+    targetGame.updatedAt = new Date();
+
+    // Build a compact mapping for response clarity
+    const assignments = targetGame.participants.map(p => ({
+      userId: p.userId,
+      childUserId: p.assignedUserId,
+      displayName: p.displayName
+    }));
+
+    return res.status(200).json({
+      status: 'success',
+      message: 'Assignments generated successfully',
+      data: {
+        game: targetGame,
+        assignments
+      }
+    });
+  } catch (error) {
+    console.error('Error generating children:', error);
+    return res.status(500).json({
+      status: 'error',
+      message: 'Failed to generate children',
+      error: error.message
+    });
+  }
+};
+
+module.exports.generateChildren = generateChildren;
+
+/**
+ * Get the child details for a user in their most recent active game
+ * @param {Object} req - Express request
+ * @param {Object} res - Express response
+ */
+const getChildDetailsByUserId = (req, res) => {
+  try {
+    const { userId } = req.params;
+    if (!userId) {
+      return res.status(400).json({
+        status: 'error',
+        message: 'User ID is required'
+      });
+    }
+
+    // Find active, matched games containing this user
+    const candidateGames = games
+      .filter(g => g.status === 'active' && g.isMatchingDone)
+      .filter(g => (g.participants || []).some(p => p.userId === userId))
+      .sort((a, b) => new Date(b.updatedAt || b.createdAt) - new Date(a.updatedAt || a.createdAt));
+
+    if (candidateGames.length === 0) {
+      return res.status(404).json({
+        status: 'error',
+        message: 'No active game with assignments found for this user'
+      });
+    }
+
+    const game = candidateGames[0];
+    const me = game.participants.find(p => p.userId === userId);
+    if (!me) {
+      return res.status(404).json({
+        status: 'error',
+        message: 'User not found in the selected game'
+      });
+    }
+
+    if (!me.assignedUserId) {
+      return res.status(400).json({
+        status: 'error',
+        message: 'Assignments not available for this user yet'
+      });
+    }
+
+    const child = game.participants.find(p => p.userId === me.assignedUserId) || null;
+
+    return res.status(200).json({
+      status: 'success',
+      data: {
+        game: {
+          gameId: game.gameId,
+          gameCode: game.gameCode,
+          name: game.name,
+          status: game.status,
+          isMatchingDone: game.isMatchingDone,
+          updatedAt: game.updatedAt
+        },
+        user: {
+          userId: me.userId,
+          displayName: me.displayName
+        },
+        child: child
+          ? {
+              userId: child.userId,
+              displayName: child.displayName
+            }
+          : null
+      }
+    });
+  } catch (error) {
+    return res.status(500).json({
+      status: 'error',
+      message: 'Failed to get child details',
+      error: error.message
+    });
+  }
+};
+
+module.exports.getChildDetailsByUserId = getChildDetailsByUserId;
