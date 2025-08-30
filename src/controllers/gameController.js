@@ -3,7 +3,107 @@
  */
 
 // In-memory storage for games (temporary until MongoDB integration)
-const games = [];
+const games = [
+  {
+    gameId: "game_1756314805403",
+    gameCode: "LOFYVF",
+    name: "newGame2025",
+    createdAt: "2025-08-27T17:13:24.891Z",
+    updatedAt: "2025-08-27T17:23:12.825Z",
+    admin: "HJPSKhXfnCcexYbZ2tFXUOqz9PP2",
+    status: "active", // created, active, completed
+    participants: [
+      {
+        userId: "HJPSKhXfnCcexYbZ2tFXUOqz9PP2",
+        displayName: "kesavan",
+        joinedAt: "2025-08-27T17:13:24.891Z",
+        isAdmin: true,
+        assignedUserId: "nhCPwKtD9pRIGvDtoKvhDkeQDCq2",
+        dareMessage: "",
+        dareCompleted: false,
+        childDisplayName: "Mas",
+      },
+      {
+        userId: "2OsTNVdPv3V3NHBHU9bMIQGysJk2",
+        displayName: "Mas",
+        joinedAt: "2025-08-27T17:18:07.355Z",
+        isAdmin: false,
+        assignedUserId: "I50LswCEQMfIq8didHZAP2OYXDi1",
+        dareMessage: "sasdasdasd  https://openai.com/index/introducing-codex Asasdasd https://youtu.be/mmlnGnndVhI?si=0OxfSjGJfr--ZFrF",
+        dareCompleted: false,
+        childDisplayName: "Mas2",
+      },
+      {
+        userId: "nhCPwKtD9pRIGvDtoKvhDkeQDCq2",
+        displayName: "Mas",
+        joinedAt: "2025-08-27T17:19:21.694Z",
+        isAdmin: false,
+        assignedUserId: "HJPSKhXfnCcexYbZ2tFXUOqz9PP2",
+        dareMessage: "",
+        dareCompleted: false,
+        childDisplayName: "kesavan",
+      },
+      {
+        userId: "I50LswCEQMfIq8didHZAP2OYXDi1",
+        displayName: "Mas2",
+        joinedAt: "2025-08-27T17:22:42.052Z",
+        isAdmin: false,
+        assignedUserId: "2OsTNVdPv3V3NHBHU9bMIQGysJk2",
+        dareMessage: "asdasdadsadadsasdas",
+        dareCompleted: false,
+        childDisplayName: "Mas",
+      },
+    ],
+    maxParticipants: 20,
+    minPrice: 0,
+    maxPrice: 0,
+    currency: "USD",
+    description: "Game for testing",
+    eventDate: "2025-08-27T17:12:17Z",
+    isMatchingDone: true,
+  },
+
+  // New game where Mas2 is admin
+  {
+    gameId: "game_1756314900000",
+    gameCode: "XYZZY2",
+    name: "newGame2025_Mas2",
+    createdAt: "2025-08-27T17:30:00.000Z",
+    updatedAt: "2025-08-27T17:35:00.000Z",
+    admin: "I50LswCEQMfIq8didHZAP2OYXDi1",
+    status: "created", // fresh game
+    participants: [
+      {
+        userId: "I50LswCEQMfIq8didHZAP2OYXDi1",
+        displayName: "Mas2",
+        joinedAt: "2025-08-27T17:30:00.000Z",
+        isAdmin: true, // now admin
+        assignedUserId: "2OsTNVdPv3V3NHBHU9bMIQGysJk2",
+        dareMessage: "asdasdadsadadsasdas",
+        dareCompleted: false,
+        childDisplayName: "Mas",
+      },
+      {
+        userId: "HJPSKhXfnCcexYbZ2tFXUOqz9PP2",
+        displayName: "kesavan",
+        joinedAt: "2025-08-27T17:13:24.891Z",
+        isAdmin: false,
+        assignedUserId: "nhCPwKtD9pRIGvDtoKvhDkeQDCq2",
+        dareMessage: "",
+        dareCompleted: false,
+        childDisplayName: "Mas",
+      },
+    ],
+    maxParticipants: 20,
+    minPrice: 0,
+    maxPrice: 0,
+    currency: "USD",
+    description: "Second game with Mas2 as admin",
+    eventDate: "2025-09-01T17:00:00Z",
+    isMatchingDone: false,
+  },
+];
+
 
 // Generate a unique game code
 const generateGameCode = () => {
@@ -263,7 +363,7 @@ module.exports = {
  */
 const generateChildren = (req, res) => {
   try {
-    const { userId } = req.params;
+    const { userId, gameId } = req.params;
 
     if (!userId) {
       return res.status(400).json({
@@ -272,29 +372,38 @@ const generateChildren = (req, res) => {
       });
     }
 
-    // Find games where user is admin
-    const adminGames = games.filter(g => g.admin === userId);
-
-    if (adminGames.length === 0) {
-      return res.status(404).json({
-        status: 'error',
-        message: 'No games found where user is admin'
-      });
-    }
-
-    // Pick the most recently created eligible game (status created and not matched yet)
-    const eligibleGames = adminGames
-      .filter(g => g.status === 'created' && !g.isMatchingDone)
-      .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
-
-    if (eligibleGames.length === 0) {
+    if (!gameId) {
       return res.status(400).json({
         status: 'error',
-        message: 'No eligible games to generate children (already active/completed or none exists)'
+        message: 'Game ID is required'
       });
     }
 
-    const targetGame = eligibleGames[0];
+    // Find the specific game by id (fallback to code for robustness)
+    const targetGame = games.find(g => g.gameId === gameId) || games.find(g => g.gameCode === gameId);
+
+    if (!targetGame) {
+      return res.status(404).json({
+        status: 'error',
+        message: 'Game not found'
+      });
+    }
+
+    // Ensure the user is the admin of this game
+    if (targetGame.admin !== userId) {
+      return res.status(403).json({
+        status: 'error',
+        message: 'Only the game admin can generate assignments for this game'
+      });
+    }
+
+    // Ensure the game is eligible
+    if (!(targetGame.status === 'created' && !targetGame.isMatchingDone)) {
+      return res.status(400).json({
+        status: 'error',
+        message: 'Game is not eligible for generating assignments'
+      });
+    }
 
     // Basic validations
     const participants = targetGame.participants || [];
@@ -337,7 +446,6 @@ const generateChildren = (req, res) => {
       }
 
       if (a.userId === b.userId) {
-        // Extremely unlikely with proper shuffle and even count, but guard anyway
         return res.status(500).json({
           status: 'error',
           message: 'Self-pairing detected; retry the operation'
@@ -358,7 +466,6 @@ const generateChildren = (req, res) => {
     targetGame.status = 'active';
     targetGame.updatedAt = new Date();
 
-    // Build a compact mapping for response clarity
     const assignments = targetGame.participants.map(p => ({
       userId: p.userId,
       childUserId: p.assignedUserId,
@@ -392,7 +499,9 @@ module.exports.generateChildren = generateChildren;
  */
 const getChildDetailsByUserId = (req, res) => {
   try {
-    const { userId } = req.params;
+    const { userId, gameId } = req.params;
+    const gameIdFromQuery = req.query && req.query.gameId ? req.query.gameId : undefined;
+    const resolvedGameId = gameId || gameIdFromQuery;
     if (!userId) {
       return res.status(400).json({
         status: 'error',
@@ -400,20 +509,32 @@ const getChildDetailsByUserId = (req, res) => {
       });
     }
 
-    // Find active, matched games containing this user
-    const candidateGames = games
-      .filter(g => g.status === 'active' && g.isMatchingDone)
-      .filter(g => (g.participants || []).some(p => p.userId === userId))
-      .sort((a, b) => new Date(b.updatedAt || b.createdAt) - new Date(a.updatedAt || a.createdAt));
+    // If specific gameId provided, use that game; else use most recent active one
+    let game;
+    if (resolvedGameId) {
+      game = games.find(g => g.gameId === resolvedGameId);
+      if (!game) {
+        return res.status(404).json({
+          status: 'error',
+          message: 'Game not found'
+        });
+      }
+    } else {
+      // Find active, matched games containing this user
+      const candidateGames = games
+        .filter(g => g.status === 'active' && g.isMatchingDone)
+        .filter(g => (g.participants || []).some(p => p.userId === userId))
+        .sort((a, b) => new Date(b.updatedAt || b.createdAt) - new Date(a.updatedAt || a.createdAt));
 
-    if (candidateGames.length === 0) {
-      return res.status(404).json({
-        status: 'error',
-        message: 'No active game with assignments found for this user'
-      });
+      if (candidateGames.length === 0) {
+        return res.status(404).json({
+          status: 'error',
+          message: 'No active game with assignments found for this user'
+        });
+      }
+
+      game = candidateGames[0];
     }
-
-    const game = candidateGames[0];
     const me = game.participants.find(p => p.userId === userId);
     if (!me) {
       return res.status(404).json({
@@ -444,12 +565,16 @@ const getChildDetailsByUserId = (req, res) => {
         },
         user: {
           userId: me.userId,
-          displayName: me.displayName
+          displayName: me.displayName,
+          dareMessage: me.dareMessage || '',
+          dareCompleted: !!me.dareCompleted
         },
         child: child
           ? {
               userId: child.userId,
-              displayName: child.displayName
+              displayName: child.displayName,
+              dareMessage: child.dareMessage || '',
+              dareCompleted: !!child.dareCompleted
             }
           : null
       }
@@ -464,3 +589,230 @@ const getChildDetailsByUserId = (req, res) => {
 };
 
 module.exports.getChildDetailsByUserId = getChildDetailsByUserId;
+
+/**
+ * Get participants for a specific game by its ID/code
+ * @param {Object} req - Express request
+ * @param {Object} res - Express response
+ */
+const getParticipantsByGameId = (req, res) => {
+  try {
+    const { gameId } = req.params;
+    if (!gameId) {
+      return res.status(400).json({
+        status: 'error',
+        message: 'Game ID is required'
+      });
+    }
+
+    const game = games.find(g => g.gameId === gameId);
+    if (!game) {
+      return res.status(404).json({
+        status: 'error',
+        message: 'Game not found'
+      });
+    }
+
+    return res.status(200).json({
+      status: 'success',
+      data: {
+        game: {
+          gameId: game.gameId,
+          gameCode: game.gameCode,
+          name: game.name,
+          status: game.status,
+          isMatchingDone: game.isMatchingDone,
+          updatedAt: game.updatedAt
+        },
+        participants: game.participants
+      }
+    });
+  } catch (error) {
+    return res.status(500).json({
+      status: 'error',
+      message: 'Failed to get participants',
+      error: error.message
+    });
+  }
+};
+
+module.exports.getParticipantsByGameId = getParticipantsByGameId;
+
+/**
+ * Get dare details for all participants in a specific game by its ID/code
+ * @param {Object} req - Express request
+ * @param {Object} res - Express response
+ */
+const getDaresByGameId = (req, res) => {
+  try {
+    const { gameId } = req.params;
+    if (!gameId) {
+      return res.status(400).json({
+        status: 'error',
+        message: 'Game ID is required'
+      });
+    }
+
+    // Support both gameId and gameCode for robustness
+    const game = games.find(g => g.gameId === gameId) || games.find(g => g.gameCode === gameId);
+    if (!game) {
+      return res.status(404).json({
+        status: 'error',
+        message: 'Game not found'
+      });
+    }
+
+    const dares = (game.participants || []).map(p => ({
+      userId: p.userId,
+      displayName: p.displayName,
+      dareMessage: p.dareMessage || '',
+      dareCompleted: !!p.dareCompleted
+    }));
+
+    return res.status(200).json({
+      status: 'success',
+      data: {
+        game: {
+          gameId: game.gameId,
+          gameCode: game.gameCode,
+          name: game.name,
+          status: game.status,
+          isMatchingDone: game.isMatchingDone,
+          updatedAt: game.updatedAt
+        },
+        dares
+      }
+    });
+  } catch (error) {
+    return res.status(500).json({
+      status: 'error',
+      message: 'Failed to get dares',
+      error: error.message
+    });
+  }
+};
+
+module.exports.getDaresByGameId = getDaresByGameId;
+
+/**
+ * Update dare details for a participant (child) in a specific game by its ID/code
+ * @param {Object} req - Express request
+ * @param {Object} res - Express response
+ */
+const updateChildDare = (req, res) => {
+  try {
+    const { gameId, userId } = req.params;
+    if (!gameId) {
+      return res.status(400).json({
+        status: 'error',
+        message: 'Game ID is required'
+      });
+    }
+
+    if (!userId) {
+      return res.status(400).json({
+        status: 'error',
+        message: 'User ID is required'
+      });
+    }
+
+    const { dareMessage, dareCompleted } = req.body || {};
+
+    // Support both gameId and gameCode for robustness
+    const game = games.find(g => g.gameId === gameId) || games.find(g => g.gameCode === gameId);
+    if (!game) {
+      return res.status(404).json({
+        status: 'error',
+        message: 'Game not found'
+      });
+    }
+
+    const participant = (game.participants || []).find(p => p.userId === userId);
+    if (!participant) {
+      return res.status(404).json({
+        status: 'error',
+        message: 'Participant not found in this game'
+      });
+    }
+
+    // Apply updates if provided
+    if (typeof dareMessage !== 'undefined') {
+      participant.dareMessage = typeof dareMessage === 'string' ? dareMessage : String(dareMessage);
+    }
+    if (typeof dareCompleted !== 'undefined') {
+      participant.dareCompleted = !!dareCompleted;
+    }
+
+    game.updatedAt = new Date();
+
+    return res.status(200).json({
+      status: 'success',
+      message: 'Dare details updated successfully',
+      data: {
+        game: {
+          gameId: game.gameId,
+          gameCode: game.gameCode,
+          name: game.name,
+          status: game.status,
+          isMatchingDone: game.isMatchingDone,
+          updatedAt: game.updatedAt
+        },
+        participant
+      }
+    });
+  } catch (error) {
+    return res.status(500).json({
+      status: 'error',
+      message: 'Failed to update dare details',
+      error: error.message
+    });
+  }
+};
+
+module.exports.updateChildDare = updateChildDare;
+
+/**
+ * Reset (delete) a game by its ID or code
+ * @param {Object} req - Express request
+ * @param {Object} res - Express response
+ */
+const resetGame = (req, res) => {
+  try {
+    const { gameId } = req.params;
+    if (!gameId) {
+      return res.status(400).json({
+        status: 'error',
+        message: 'Game ID is required'
+      });
+    }
+
+    // Find by id or code
+    const index = games.findIndex(g => g.gameId === gameId || g.gameCode === gameId);
+    if (index === -1) {
+      return res.status(404).json({
+        status: 'error',
+        message: 'Game not found'
+      });
+    }
+
+    const [removed] = games.splice(index, 1);
+
+    return res.status(200).json({
+      status: 'success',
+      message: 'Game deleted successfully',
+      data: {
+        gameId: removed.gameId,
+        gameCode: removed.gameCode,
+        name: removed.name
+      }
+    });
+  } catch (error) {
+    return res.status(500).json({
+      status: 'error',
+      message: 'Failed to delete game',
+      error: error.message
+    });
+  }
+};
+
+module.exports.resetGame = resetGame;
