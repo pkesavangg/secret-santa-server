@@ -4,6 +4,7 @@
 const express = require('express');
 const router = express.Router();
 const authService = require('../services/authService');
+const { updateUserDetailsInGames } = require('../controllers/gameController');
 
 /**
  * @route   GET /check-display-name/:displayName
@@ -37,7 +38,17 @@ router.get('/check-display-name/:displayName', async (req, res) => {
     
     return res.status(200).json({
       success: true,
-      data: result
+      data: {
+        exists: result.exists,
+        user: result.user
+          ? {
+              uid: result.user.uid,
+              email: result.user.email || '',
+              displayName: result.user.displayName || '',
+              photoURL: result.user.photoURL || ''
+            }
+          : null
+      }
     });
   } catch (error) {
     console.error('Error checking display name:', error);
@@ -50,3 +61,10 @@ router.get('/check-display-name/:displayName', async (req, res) => {
 });
 
 module.exports = router;
+
+/**
+ * @route   PUT /users/sync-profile/:userId
+ * @desc    Update user's email/photoURL (and optional displayName) across all games
+ * @access  Authenticated (up to caller to protect)
+ */
+router.put('/sync-profile/:userId', updateUserDetailsInGames);

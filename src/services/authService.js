@@ -44,8 +44,9 @@ class AuthService {
             exists: true,
             user: {
               uid: existingUser.uid,
-              email: existingUser.email,
-              displayName: existingUser.displayName
+              email: existingUser.email || '',
+              displayName: existingUser.displayName,
+              photoURL: existingUser.photoURL || ''
             }
           };
         }
@@ -62,6 +63,29 @@ class AuthService {
     } catch (error) {
       console.error('Error checking display name:', error);
       throw error;
+    }
+  }
+
+  /**
+   * Get a public profile for a Firebase user (uid, email, displayName, photoURL)
+   * @param {string} userId
+   * @returns {Promise<{uid: string, email: string, displayName: string, photoURL: string}>}
+   */
+  async getUserPublicProfile(userId) {
+    try {
+      if (!userId) {
+        return { uid: '', email: '', displayName: '', photoURL: '' };
+      }
+      const userRecord = await this.auth.getUser(userId);
+      return {
+        uid: userRecord.uid,
+        email: userRecord.email || '',
+        displayName: userRecord.displayName || '',
+        photoURL: userRecord.photoURL || ''
+      };
+    } catch (error) {
+      // On failure, return minimal with uid and blanks
+      return { uid: userId, email: '', displayName: '', photoURL: '' };
     }
   }
 
