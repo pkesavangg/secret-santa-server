@@ -426,11 +426,11 @@ module.exports = {
 };
 
 /**
- * Generate symmetric assignments (pairings) for the latest eligible admin game
+ * Generate non-symmetric Secret Santa assignments (derangement)
  * Rules:
  * - User must be admin of an eligible game (status: created, isMatchingDone: false)
- * - Participants count must be even and >= 2
- * - Pairings are symmetric: if A -> B then B -> A
+ * - At least 3 participants are required
+ * - Each participant is assigned to a different participant (no self-assignments)
  * - After assignment: game.status becomes 'active' and isMatchingDone becomes true
  *
  * @param {Object} req - Express request object
@@ -468,26 +468,23 @@ const generateChildren = async (req, res) => {
       }
 
       const participants = targetGame.participants || [];
-      if (participants.length <= 3) {
-        return res.status(400).json({ status: 'error', message: 'At least 4 participants are required' });
-      }
-      if (participants.length % 2 !== 0) {
-        return res.status(400).json({ status: 'error', message: 'Participants count must be even for symmetric pairing' });
+      if (participants.length < 3) {
+        return res.status(400).json({ status: 'error', message: 'At least 3 participants are required for non-symmetric assignments' });
       }
 
+      // Sattolo's algorithm: produce a single cycle (derangement for n >= 3)
       const shuffled = [...participants];
       for (let i = shuffled.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
+        const j = Math.floor(Math.random() * i); // 0 <= j < i
         [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
       }
       for (const p of participants) { p.assignedUserId = null; }
-      for (let i = 0; i < shuffled.length; i += 2) {
-        const a = shuffled[i];
-        const b = shuffled[i + 1];
-        if (!a || !b) { return res.status(500).json({ status: 'error', message: 'Unexpected pairing error' }); }
-        if (a.userId === b.userId) { return res.status(500).json({ status: 'error', message: 'Self-pairing detected; retry the operation' }); }
-        a.assignedUserId = b.userId;
-        b.assignedUserId = a.userId;
+      for (let i = 0; i < shuffled.length; i++) {
+        const giver = shuffled[i];
+        const receiver = shuffled[(i + 1) % shuffled.length];
+        if (!giver || !receiver) { return res.status(500).json({ status: 'error', message: 'Unexpected assignment error' }); }
+        if (giver.userId === receiver.userId) { return res.status(500).json({ status: 'error', message: 'Self-assignment detected; retry the operation' }); }
+        giver.assignedUserId = receiver.userId;
       }
       const idToDisplayName = new Map(participants.map(p => [p.userId, p.displayName]));
       for (const p of participants) {
@@ -537,24 +534,17 @@ const generateChildren = async (req, res) => {
 
     // Basic validations
     const participants = targetGame.participants || [];
-    if (participants.length <= 3) {
+    if (participants.length < 3) {
       return res.status(400).json({
         status: 'error',
-        message: 'At least 4 participants are required'
+        message: 'At least 3 participants are required for non-symmetric assignments'
       });
     }
 
-    if (participants.length % 2 !== 0) {
-      return res.status(400).json({
-        status: 'error',
-        message: 'Participants count must be even for symmetric pairing'
-      });
-    }
-
-    // Create a shuffled copy of participants (references to same objects)
+    // Sattolo's algorithm: produce a single cycle (derangement for n >= 3)
     const shuffled = [...participants];
     for (let i = shuffled.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
+      const j = Math.floor(Math.random() * i); // 0 <= j < i
       [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
     }
 
@@ -563,27 +553,26 @@ const generateChildren = async (req, res) => {
       p.assignedUserId = null;
     }
 
-    // Pair 0-1, 2-3, ... ensuring symmetry
-    for (let i = 0; i < shuffled.length; i += 2) {
-      const a = shuffled[i];
-      const b = shuffled[i + 1];
+    // Assign each participant to the next in the cycle (non-symmetric)
+    for (let i = 0; i < shuffled.length; i++) {
+      const giver = shuffled[i];
+      const receiver = shuffled[(i + 1) % shuffled.length];
 
-      if (!a || !b) {
+      if (!giver || !receiver) {
         return res.status(500).json({
           status: 'error',
-          message: 'Unexpected pairing error'
+          message: 'Unexpected assignment error'
         });
       }
 
-      if (a.userId === b.userId) {
+      if (giver.userId === receiver.userId) {
         return res.status(500).json({
           status: 'error',
-          message: 'Self-pairing detected; retry the operation'
+          message: 'Self-assignment detected; retry the operation'
         });
       }
 
-      a.assignedUserId = b.userId;
-      b.assignedUserId = a.userId;
+      giver.assignedUserId = receiver.userId;
     }
 
     // Populate child display names for easier reads
